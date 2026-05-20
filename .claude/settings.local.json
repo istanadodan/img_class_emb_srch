@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"d:\\\\works\\\\python-projects\\\\picRecog\"; ls -Recurse -Exclude \".git\", \".venv\", \"__pycache__\" | Where-Object { $_.PSIsContainer } | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"d:\\\\works\\\\python-projects\\\\picRecog\\\\\", \"\"\\) } | Sort-Object)"
+    ]
+  }
+}
