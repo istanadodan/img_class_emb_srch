@@ -7,7 +7,7 @@ name = "picrecog"
 version = "0.1.0"
 description = "AI-powered image classification system using LangGraph and Streamlit"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.15"
 authors = [
     {name = "Michael", email = "pjy16@etners.com"}
 ]
@@ -42,7 +42,6 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
-    "types-httpx>=0.24.0",
 ]
 
 [project.urls]
