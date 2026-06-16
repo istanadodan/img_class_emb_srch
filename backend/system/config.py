@@ -1,36 +1,52 @@
 """System Configuration - 환경 변수 및 설정"""
 
-import os
 from typing import Optional
 from pydantic_settings import BaseSettings
+from pydantic import Field
+import logging
+import sys
 
 
 class Settings(BaseSettings):
     """애플리케이션 설정"""
 
-    # StudioLM Configuration
-    studiolm_api_url: str = os.getenv("STUDIOLM_API_URL", "http://localhost:8000")
-    studiolm_api_key: Optional[str] = os.getenv("STUDIOLM_API_KEY")
+    # ... (existing fields)
+    studiolm_api_url: str = Field(default="http://localhost:11434")
+    studiolm_api_key: str = Field(default="lm-studio")
+    embedding_model_name: str = Field(default="Qwen/Qwen3-VL-Embedding-2B")
+    llm_model_name: str = Field(default="Qwen/Qwen3.5-9B")
 
-    # OpenAI Configuration (Optional)
-    openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
-
-    # Claude Configuration (Optional)
-    claude_api_key: Optional[str] = os.getenv("CLAUDE_API_KEY")
-
-    # Gemini Configuration (Optional)
-    gemini_api_key: Optional[str] = os.getenv("GEMINI_API_KEY")
-
-    # Ollama Configuration (Optional)
-    ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    # Database Configuration (PostgreSQL)
+    db_host: str = Field(default="localhost")
+    db_port: int = Field(default=41659)
+    db_name: str = Field(default="imgdb")
+    db_user: str = Field(default="postgres")
+    db_password: str = Field(default="postgres")
 
     # Application Settings
-    debug: bool = os.getenv("DEBUG", "False").lower() == "true"
-    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    debug: bool = Field(default=False)
+    log_level: str = Field(default="INFO")
 
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
+
+    def setup_logging(self):
+        """프로젝트 로깅 설정"""
+        level = getattr(logging, self.log_level.upper(), logging.INFO)
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            stream=sys.stdout,
+            force=True,
+        )
+        # 타 라이브러리 로그 레벨 조정
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("pydantic").setLevel(logging.WARNING)
+        logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+        logging.getLogger("transformers").setLevel(logging.ERROR)
+        logging.getLogger("transformers.utils.doc").setLevel(logging.ERROR)
 
 
 settings = Settings()

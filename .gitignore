@@ -1,45 +1,13 @@
-# Environment
-.env
-.env.local
-.env.*.local
-
 # Virtual Environment
-venv/
-env/
-ENV/
 .venv/
 
 # Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+**/__pycache__
+*bk*.py
 
 # Testing
 .pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.hypothesis/
+tests/
 
 # IDE
 .vscode/
@@ -48,9 +16,11 @@ htmlcov/
 *.swo
 *~
 .DS_Store
+.claude/
 
 # Project
 .langchain_cache/
 temp/
 logs/
 *.log
+.cache/

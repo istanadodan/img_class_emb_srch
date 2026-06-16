@@ -1,0 +1,9 @@
+/.venv
+/.vscode
+**/__pycache__/
+/.pytest_cache
+/.git
+.streamlit/config.toml
+/.claude
+/tests
+/.cache

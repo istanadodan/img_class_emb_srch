@@ -1,11 +1,27 @@
 """Main Streamlit Application - PicRecog UI 진입점"""
 
 import streamlit as st
+import asyncio
 from ui.styles.theme import apply_theme
-from ui.pages.classifier import render_classifier_page
+from ui.pages.classifier_ui import render_classifier_page
+from ui.pages.gallery_ui import render_gallery_page
+from ui.pages.search_ui import render_search_page
+
+# from backend.clients.embedding_client import preload_emb_client
+from backend.system import database
+from backend.domain import db_models  # DB 모델 등록을 위해 명시적 임포트
+from backend.system.config import settings
+import logging
+import warnings
+
+# 로깅 설정 초기화
+settings.setup_logging()
+logger = logging.getLogger(__name__)
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 
-def main():
+async def main():
     """메인 애플리케이션"""
 
     # 테마 적용
@@ -20,7 +36,7 @@ def main():
 
         page = st.radio(
             "메뉴",
-            ["🏠 분류", "⚙️ 설정", "📊 통계"],
+            ["🏠 분류", "🖼️ 갤러리", "🔍 검색", "⚙️ 설정", "📊 통계"],
             label_visibility="collapsed",
         )
 
@@ -29,7 +45,11 @@ def main():
 
     # 페이지 라우팅
     if page == "🏠 분류":
-        render_classifier_page()
+        await render_classifier_page()
+    elif page == "🖼️ 갤러리":
+        await render_gallery_page()
+    elif page == "🔍 검색":
+        await render_search_page()
     elif page == "⚙️ 설정":
         st.title("⚙️ 설정")
         st.write("설정 페이지 개발 중...")
@@ -39,4 +59,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # 테이블 생성
+    database.init_db()
+    # preload_emb_client()
+    asyncio.run(main())

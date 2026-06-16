@@ -1,167 +1,88 @@
-# PicRecog - AI 기반 이미지 자동 분류 시스템
+# PicRecog - AI 기반 이미지 자동 분류 및 유사도 검색 시스템
 
-Streamlit UI와 LangGraph 기반 Backend로 구성된 현대적인 이미지 분류 시스템입니다.
+AI를 활용하여 이미지를 자동으로 분류하고, 벡터 데이터베이스(pgvector)를 통해 유사한 이미지를 지능적으로 검색하는 현대적인 시스템입니다.
 
-이미지 경로/폴더를 입력받아 AI 모델로 4가지 카테고리(인물, 꽃/경치, 글자, 행사)로 자동 분류합니다.
+## 🌟 핵심 기능
 
-## 프로젝트 구조
+- **지능형 이미지 분류**: `Qwen-VL` 기반의 VLM(Vision-Language Model)을 활용해 인물, 동물, 장소, 꽃, 자연, 텍스트, 행사 등 7가지 카테고리로 이미지를 정밀하게 자동 분류합니다.
+- **벡터 유사도 검색**: `Qwen-VL` 이미지 임베딩 및 `Nomic Embed` 기반의 텍스트 임베딩 기술과 `pgvector`를 결합하여 시각적/문맥적으로 유사한 이미지를 고속으로 검색합니다.
+- **실시간 비동기 피드백**: `asyncio.Queue`와 `st.fragment`를 결합하여 대량의 이미지 처리 중에도 UI 멈춤 없이 실시간 진행 상황과 중간 결과를 사용자에게 즉시 시각화합니다.
+- **워크플로우 자동화**: `LangGraph`를 통해 분류, 검증, 임베딩 생성 및 저장 과정을 체계적인 파이프라인으로 관리합니다. 특히 "no-class" 이미지도 벡터 데이터가 있다면 영속화하여 모든 이미지의 검색 가능성을 보장합니다.
+- **고성능 로깅**: 프로젝트 전반에 표준 `logging` 모듈을 도입하고 중앙 집중식 설정을 통해 운영 효율성과 추적성을 극대화했습니다.
+- **지능형 갤러리**: 분류된 이미지를 카테고리별로 탐색하고, 특정 이미지와 관련된 유사 이미지를 즉시 확인할 수 있는 인터랙티브 UI(Streamlit)를 제공합니다.
+
+## 🚀 실시간 멀티 태스크 작업 추적
+
+PicRecog은 대량의 이미지를 처리할 때 UI가 멈추지 않도록 **비차단 멀티 태스크 아키텍처**를 채택하고 있습니다. 사용자는 여러 개의 분류 작업을 동시에 실행하고 각각의 진행 상황을 개별적으로 모니터링할 수 있습니다.
+
+### 📋 이미지 처리 단계별 요약
+
+이미지 분류 버튼을 누르면 백그라운드에서 다음과 같은 과정이 자동으로 수행됩니다.
+
+| 단계 | 수행 내용 | 사용자 화면 (UI) |
+| :--- | :--- | :--- |
+| **1. 준비** | 처리할 파일의 개수를 파악하고 작업 공간을 생성합니다. | "준비 중" 메시지 및 작업 바 생성 |
+| **2. 로드** | 이미지를 읽어오고 분석에 적합한 크기로 최적화합니다. | "X개 이미지 로드 중" 상태 표시 |
+| **3. 분석** | AI(VLM)가 이미지의 내용을 분석하여 카테고리를 결정합니다. | **분류 중** (현재 분석 중인 파일명 표시) |
+| **4. 저장** | 분석 결과와 이미지의 특징(벡터)을 DB에 영구 저장합니다. | **저장 중** (진행률 바 실시간 업데이트) |
+| **5. 완료** | 모든 이미지 처리가 끝나면 결과를 요약 보고합니다. | 완료 메시지 및 "목록에서 제거" 버튼 활성화 |
+
+### 🚦 작업 상태 가이드
+
+작업 목록의 우측 상단 표시를 통해 현재 진행 상태를 한눈에 파악할 수 있습니다.
+
+| 상태 | 표시 (Status) | 의미 및 조치 |
+| :--- | :--- | :--- |
+| **진행 중** | `RUNNING` | 분석이 활발히 진행 중입니다. (파란색 바) |
+| **정상 완료** | `COMPLETED` | 모든 이미지가 오류 없이 성공적으로 분류되었습니다. |
+| **부분 오류** | `COMPLETED` | 처리는 끝났으나, 일부 이미지가 네트워크 문제 등으로 실패했습니다. (노란색 경고) |
+| **치명적 실패** | `FAILED` | 경로 오류나 시스템 문제로 작업이 중단되었습니다. (빨간색 에러) |
+
+> **Tip**: 작업이 완료되거나 실패한 후에는 "목록에서 제거" 버튼을 눌러 화면을 깔끔하게 정리할 수 있습니다. 이미 처리된 중복 파일은 카운트에서 제외하여 정확한 진행률을 보여줍니다.
+
+## 🛠 프로젝트 구조
 
 ```
 picRecog/
-├── backend/                  # 백엔드 (LangGraph 최적화)
-│   ├── domain/              # 도메인 객체, 엔티티
-│   │   └── models.py        # ImageCategory, ClassificationResult
-│   ├── system/              # 로깅, 설정, 예외처리
-│   │   ├── config.py        # 환경 설정
-│   │   └── exceptions.py    # 커스텀 예외
-│   ├── service/             # 비즈니스 로직
-│   │   └── classifier.py    # 이미지 분류 서비스
-│   ├── presentation/        # 응답 스키마
-│   │   └── schemas.py       # API 응답 형식
-│   ├── clients/             # AI 모델 클라이언트
-│   │   ├── base.py          # 기본 인터페이스
-│   │   └── studiolm.py      # StudioLM API 클라이언트
-│   └── graph/               # LangGraph 워크플로우
-│       └── workflow.py      # 분류 워크플로우
-├── ui/                       # 프론트엔드 (Streamlit)
-│   ├── app.py              # 메인 애플리케이션
-│   ├── pages/              # 페이지들
-│   │   └── classifier.py   # 분류 페이지
-│   ├── components/         # 재사용 컴포넌트
-│   │   └── result_display.py
-│   └── styles/             # 테마, 스타일
-│       └── theme.py
-├── shared/                  # 공유 모듈
-│   └── constants.py        # 상수 정의
-├── tests/                   # 테스트
-├── pyproject.toml          # 프로젝트 설정
-├── .env.example            # 환경 변수 템플릿
-└── CLAUDE.md               # 개발 가이드
+├── backend/                  # 백엔드 핵심 로직
+│   ├── clients/             # AI 모델(Qwen, Nomic) 및 임베딩 클라이언트
+│   ├── domain/              # 데이터 모델 (SQLAlchemy/pgvector) 및 도메인 엔티티
+│   ├── service/             # 비즈니스 로직 (분류 서비스, 유사도 검색)
+│   ├── graph/               # LangGraph 기반 처리 워크플로우 설계
+│   └── system/              # 설정(config.py), 데이터베이스 연결, 예외 처리
+├── ui/                       # Streamlit 기반 프론트엔드
+│   ├── pages/               # 분류, 갤러리, 검색 UI 구성
+│   └── styles/              # 테마 및 디자인 정의
+├── shared/                  # 프로젝트 공통 상수 및 유틸리티
+├── GEMINI.md               # 아키텍처 및 코딩 가이드 (중요)
+├── pyproject.toml          # 프로젝트 의존성 관리 (uv)
+└── README.md               # 프로젝트 개요
 ```
 
-## 설치
+## 🚀 빠른 시작
 
-### 1. uv 설치
+### 1. 전제 조건
+- Python 3.12+ (uv 권장)
+- PostgreSQL (pgvector 확장 활성화 필요)
+- LM Studio 또는 호환되는 LLM/VLM API 서버
 
+### 2. 설치 및 설정
 ```bash
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# 의존성 설치
+uv sync
 
-# macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# API 설정
+# backend/system/config.py 파일 또는 .env 파일을 통해 데이터베이스 및 API 서버 정보를 설정하십시오.
 ```
 
-### 2. 의존성 설치
-
+### 3. 실행
 ```bash
-# 프로젝트 의존성 설치
-uv sync --all-extras
-```
-
-### 3. 환경 설정
-
-```bash
-# .env 파일 생성
-cp .env.example .env
-
-# StudioLM API 설정 (필수)
-# STUDIOLM_API_URL=http://localhost:8000
-# STUDIOLM_API_KEY=your_api_key
-```
-
-## 실행
-
-### Streamlit UI 실행
-
-```bash
+# Streamlit 실행 (최초 실행 시 데이터베이스 테이블이 자동 생성됩니다)
 uv run streamlit run ui/app.py
 ```
 
-UI는 `http://localhost:8501`에서 접속 가능합니다.
+## 📚 개발 가이드
+프로젝트의 상세한 코딩 스타일, 의존성 주입 패턴(`@transactional`), UI 설계 원칙은 **[GEMINI.md](GEMINI.md)** 파일에 기록되어 있습니다. 향후 코드 수정이나 기능 추가 시 해당 가이드를 반드시 준수해야 합니다.
 
-## 개발
-
-### 코드 품질
-
-```bash
-# 포맷팅
-uv run black backend/ ui/ shared/ tests/
-
-# 린팅
-uv run ruff check backend/ ui/ shared/ tests/
-uv run ruff format backend/ ui/ shared/ tests/
-
-# 타입 체킹
-uv run mypy backend/ ui/ shared/
-```
-
-### 테스트
-
-```bash
-# 전체 테스트
-uv run pytest tests/ -v
-
-# 커버리지 포함
-uv run pytest tests/ --cov=backend --cov=ui --cov=shared
-```
-
-## 아키텍처
-
-### 계층 분리
-
-- **Domain**: 도메인 엔티티, 비즈니스 규칙
-- **System**: 공통 유틸, 설정, 로깅
-- **Service**: 비즈니스 로직
-- **Presentation**: API 스키마
-- **Clients**: AI 모델 클라이언트 (추상화)
-- **Graph**: LangGraph 워크플로우
-
-### AI 클라이언트 패턴
-
-모든 AI 제공자는 `AIClient` 인터페이스를 구현합니다:
-
-```python
-class AIClient(ABC):
-    async def classify_image(self, image_path: str) -> dict:
-        """이미지 분류"""
-        pass
-
-    def is_available(self) -> bool:
-        """사용 가능 여부 확인"""
-        pass
-```
-
-지원되는 클라이언트:
-- StudioLM (Primary)
-- OpenAI
-- Claude
-- Gemini
-- Ollama
-
-## 환경 변수
-
-```bash
-# StudioLM
-STUDIOLM_API_URL=http://localhost:8000
-STUDIOLM_API_KEY=...
-
-# Optional: 다른 AI 제공자
-OPENAI_API_KEY=...
-CLAUDE_API_KEY=...
-GEMINI_API_KEY=...
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Application
-DEBUG=False
-LOG_LEVEL=INFO
-```
-
-## 리소스
-
-- [CLAUDE.md](CLAUDE.md) - 개발 가이드
-- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
-- [Streamlit Documentation](https://docs.streamlit.io/)
-
-## 라이센스
-
+## 📝 라이선스
 MIT

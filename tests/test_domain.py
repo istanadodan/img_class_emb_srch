@@ -1,7 +1,7 @@
 """Tests for Domain Layer"""
 
-import pytest
-from backend.domain.models import ImageCategory, ClassificationResult
+from shared.classification_schema import ClassificationResult
+from shared.image_schema import ImageCategory
 
 
 def test_image_category_enum():
@@ -15,13 +15,11 @@ def test_image_category_enum():
 def test_classification_result():
     """Test ClassificationResult model"""
     result = ClassificationResult(
-        image_path="/path/to/image.jpg",
         category=ImageCategory.PEOPLE,
         confidence=0.95,
         description="Portrait photo",
     )
 
-    assert result.image_path == "/path/to/image.jpg"
     assert result.category == ImageCategory.PEOPLE
     assert result.confidence == 0.95
     assert result.description == "Portrait photo"

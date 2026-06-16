@@ -2,7 +2,7 @@
 
 import streamlit as st
 from typing import List
-from backend.domain.models import ClassificationResult
+from shared.classification_schema import ClassificationResult
 
 
 def display_classification_results(results: List[ClassificationResult]):

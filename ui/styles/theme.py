@@ -13,6 +13,15 @@ def apply_theme():
         initial_sidebar_state="expanded",
     )
 
+    st.navigation(
+        [
+            st.Page("app.py", title="🏠 분류"),
+            # st.Page("pages/gallery_ui.py", title="🖼️ 갤러리"),
+            # st.Page("pages/search_ui.py", title="🔍 검색"),
+            # st.Page("pages/classifier_ui.py", title="⚙️ 분류"),
+        ]
+    )
+
     # Custom CSS for warm and modern feel
     st.markdown(
         """
@@ -60,6 +69,19 @@ def apply_theme():
             padding: 20px;
             background: white;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Skeleton Pulse Animation */
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        .skeleton {
+            animation: pulse 1.5s infinite ease-in-out;
+            background-color: #F1F3F5;
+            border-radius: 8px;
+            width: 100%;
         }
         </style>
         """,

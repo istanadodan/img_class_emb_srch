@@ -23,3 +23,9 @@ class ConfigurationException(PicRecogException):
     """설정 관련 예외"""
 
     pass
+
+
+class DatabaseConnectionException(PicRecogException):
+    """데이터베이스 연결 실패 관련 예외"""
+
+    pass
