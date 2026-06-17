@@ -59,20 +59,22 @@ def render_progress():
                 elif event_type in ["result", "error"]:
                     if path:
                         # 경로 정규화 (절대 경로 문자열 기반 비교)
-                        norm_path = str(Path(path).resolve())
+                        norm_path: str = str(Path(path).resolve())
                         if norm_path not in task["processed_paths"]:
                             task["processed_paths"].add(norm_path)
                             task["done_count"] = len(task["processed_paths"])
 
                         if event_type == "result":
-                            category = event.get("category", "no-class")
+                            category: str = event.get("category", "no-class")
                             task["logs"].append(f"✅ 완료: {Path(path).name} -> {category}")
                         else:
+                            # 개별 이미지 처리 중 에러 발생 (임베딩 실패 등)
                             task["has_error"] = True
-                            task["logs"].append(
-                                f"❌ 에러: {Path(path).name} - {event.get('message', '알 수 없는 오류')}"
-                            )
+                            node: str = event.get("node", "unknown")
+                            msg: str = event.get("message", "알 수 없는 오류")
+                            task["logs"].append(f"❌ 에러: {Path(path).name} ({node}) - {msg}")
                     else:
+                        # 경로 정보가 없는 시스템 레벨 에러
                         if event_type == "error":
                             task["has_error"] = True
                             task["logs"].append(
@@ -130,29 +132,36 @@ def render_progress():
             with col2:
                 st.caption(f"시작: {task['start_time']}")
 
-            # 로그 표시 (최근 5개)
-            for log in task["logs"][-5:]:
+            # 모든 로그 표시
+            for log in task["logs"]:
                 st.text(log)
 
 
-async def run_classification_task(task_id, path_input, input_type, queue_async_q):
+async def run_classification_task(task_id: str, path_input: str, input_type: str, queue_async_q: Any):
     """백그라운드 분류 작업 실행 (비차단)"""
-    service = ImageClassifierService(
+    service: ImageClassifierService = ImageClassifierService(
         llm_client=StudioLLMClient(), embedding_client=get_emb_client()
     )
+    
+    # 1. 경로 정규화: 공백 제거, 따옴표 제거, 역슬래시를 슬래시로 변환(도커 호환성)
+    clean_path: str = path_input.strip().replace('"', "").replace("'", "")
+    
+    # 2. 경로 객체 생성 및 절대 경로 여부 확인
+    p: Path = Path(clean_path)
+    
+    # 도커 환경(/app)에서 입력한 경로가 절대 경로인 경우 그대로 사용, 
+    # 상대 경로인 경우에만 현재 디렉토리 기준으로 resolve
+    final_path: str = str(p.absolute()) if p.is_absolute() else str(p.resolve())
 
     try:
         if input_type == "📁 폴더":
-            await service.classify_folder(folder_path=path_input, event_queue=queue_async_q)
+            await service.classify_folder(folder_path=final_path, event_queue=queue_async_q)
         else:
-            image_path = str(Path(path_input.replace('"', "")).resolve())
-            await service.classify_batch([image_path], event_queue=queue_async_q)
+            await service.classify_batch([final_path], event_queue=queue_async_q)
 
     except Exception as e:
         await queue_async_q.put({"type": "fatal_error", "message": f"치명적 오류: {str(e)}"})
     finally:
-        # The finally block's state check is no longer needed here
-        # as render_progress will determine completion based on done_count vs total_count.
         pass
 
 

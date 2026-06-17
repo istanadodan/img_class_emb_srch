@@ -53,13 +53,29 @@ class StudioLLMClient(AIClient):
 
     async def classify_image(self, image_data: bytes) -> ClassificationResult:
         try:
-            image_base64 = base64.b64encode(image_data).decode("utf-8")
-            messages = [
-                {"role": "system", "content": "You are a helpful assistant."},
+            image_base64: str = base64.b64encode(image_data).decode("utf-8")
+            system_prompt: str = (
+                "You are a sophisticated image analysis AI. Your task is to classify the image into one of the following categories: "
+                "people, animal, place, flower, nature, text, events. "
+                "Provide a highly detailed description of the image content to be used for semantic search. "
+                "\n\n### Detailed Analysis Instructions:\n"
+                "1. **General Scene**: Describe the overall environment, lighting, and composition.\n"
+                "2. **People (If present)**: Focus only on the main subjects who are central to the image. **Exclude people in the background or those who are incidental and not the primary focus.** For the main subjects, describe age, gender, clothing, accessories (like glasses, hats), facial expressions, and activities.\n"
+                "3. **Objects**: List significant objects and their characteristics.\n"
+                "4. **Colors & Atmosphere**: Mention dominant colors and the overall mood/feeling.\n"
+                "5. **Keywords**: Extract 5-10 descriptive keywords for the 'objects' list.\n"
+                "\nOutput must be in valid JSON format according to the provided schema."
+            )
+
+            messages: list[dict[str, Any]] = [
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Classify this image..."},
+                        {
+                            "type": "text",
+                            "text": "Analyze this image in detail and provide the classification result in JSON.",
+                        },
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
@@ -67,7 +83,7 @@ class StudioLLMClient(AIClient):
                     ],
                 },
             ]
-            completion = await self.generate_message(
+            completion: ChatCompletion = await self.generate_message(
                 messages=messages,
                 output_schema={
                     "type": "json_schema",
@@ -78,7 +94,15 @@ class StudioLLMClient(AIClient):
                     },
                 },
             )
-            return ClassificationResult.model_validate(completion.choices[0].message.content)
+            # LLM may return JSON wrapped in backticks or as a raw string
+            from backend.system.utils import parse_structured_response
+
+            result: Optional[ClassificationResult] = parse_structured_response(
+                completion.choices[0].message, ClassificationResult
+            )
+            if not result:
+                raise AIClientException("Failed to parse classification result from LLM response.")
+            return result
         except Exception as e:
             raise AIClientException(f"Classification error: {str(e)}")
 

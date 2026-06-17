@@ -3,7 +3,7 @@
 import io
 import asyncio
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Coroutine
 from PIL import Image
 from backend.clients.base import AIClient
 from shared.classification_schema import ClassificationResponse
@@ -11,7 +11,8 @@ from backend.system.exceptions import ImageProcessingException
 from backend.service.graph.workflow import create_classification_workflow
 from backend.system.event_handler import UIEventHandler
 
-from backend.clients.llm_clients import StudioLLMClient # Updated import
+from backend.clients.llm_clients import StudioLLMClient  # Updated import
+
 
 class ImageClassifierService:
     """이미지 분류 서비스"""
@@ -49,19 +50,22 @@ class ImageClassifierService:
         """
         배치 이미지 분류 (단일 워크플로우 인스턴스 내 병렬 처리)
         """
-        results = []
-        errors = []
+        results: List[ClassificationResponse] = []
+        errors: List[tuple[str, str]] = []
+
         # 이벤트 큐에 총 개수 전달
-        await event_queue.put({"type": "total_count", "total_count": len(image_paths)})
+        await UIEventHandler.publish(event_queue, "total_count", "", total_count=len(image_paths))
 
         # 1. 이미지 전처리 병렬 수행 (I/O & CPU)
         await UIEventHandler.publish(
             event_queue, "status", f"{len(image_paths)}개 이미지 로드 중..."
         )
 
-        load_tasks = [asyncio.to_thread(self._load_and_resize_image, path) for path in image_paths]
+        load_tasks: List[Coroutine[Any, Any, bytes]] = [
+            asyncio.to_thread(self._load_and_resize_image, path) for path in image_paths
+        ]
         try:
-            loaded_images = await asyncio.wait_for(
+            loaded_images: List[Any] = await asyncio.wait_for(
                 asyncio.gather(
                     *load_tasks,
                     return_exceptions=True,
@@ -73,11 +77,11 @@ class ImageClassifierService:
             return results, [(path, f"로드 시간 초과: {str(e)}") for path in image_paths]
 
         # 2. 유효한 데이터로 초기 상태 리스트 준비
-        initial_states = []
+        initial_states: List[dict[str, Any]] = []
 
         for i, img in enumerate(loaded_images):
             if isinstance(img, Exception):
-                err_msg = f"Load error: {str(img)}"
+                err_msg: str = f"Load error: {str(img)}"
                 errors.append((image_paths[i], err_msg))
                 await UIEventHandler.publish(event_queue, "error", err_msg, path=image_paths[i])
                 if not skip_errors:
@@ -112,20 +116,24 @@ class ImageClassifierService:
         from langchain_core.runnables import RunnableConfig
 
         # RunnableConfig를 통해 event_queue 전달 (노드에서 사용 가능)
-        config = RunnableConfig(max_concurrency=10, configurable={"event_queue": event_queue})
+        config: RunnableConfig = RunnableConfig(
+            max_concurrency=10, configurable={"event_queue": event_queue}
+        )
 
-        batch_results = await self.workflow.abatch(initial_states, config=config)
+        batch_results: List[dict[str, Any]] = await self.workflow.abatch(
+            initial_states, config=config
+        )
 
         # 4. 결과 매핑 및 최종 에러 확인
         for state in batch_results:
-            img_path = state["image_path"]
-            error = state.get("error")
-            category = state.get("category") or "no-class"
+            img_path: str = state["image_path"]
+            error: Optional[str] = state.get("error")
+            category: str = state.get("category") or "no-class"
 
             if error:
                 errors.append((img_path, error))
 
-            res = ClassificationResponse(
+            res: ClassificationResponse = ClassificationResponse(
                 image_path=img_path,
                 category=category,
                 confidence=state.get("confidence", 0.0),

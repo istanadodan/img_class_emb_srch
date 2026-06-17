@@ -42,9 +42,9 @@ async def render_nl_search_page():
             st.success(f"총 {len(results)}개의 이미지를 찾았습니다.")
 
             # 3열 갤러리 렌더링
-            cols = st.columns(3)
+            cols = st.columns(5)
             for idx, img in enumerate(results):
-                col_idx = idx % 3
+                col_idx = idx % 5
                 with cols[col_idx]:
                     render_safe_image(img["path"], width="stretch")
                     st.caption(f"📍 {Path(img['path']).name}")

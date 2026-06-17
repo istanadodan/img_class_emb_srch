@@ -7,14 +7,15 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
+
 def parse_structured_response(response: Any, model_class: Type[T]) -> Optional[T]:
     """
     LLM/에이전트의 응답에서 특정 Pydantic 모델 형식의 구조화된 데이터를 추출하고 파싱합니다.
-    
+
     Args:
         response: AIMessage, str, 또는 dict 형식의 응답 객체
         model_class: 파싱할 Pydantic 모델 클래스
-        
+
     Returns:
         파싱된 모델 인스턴스 또는 실패 시 None
     """
@@ -23,8 +24,10 @@ def parse_structured_response(response: Any, model_class: Type[T]) -> Optional[T
 
     content = ""
     # 1. 콘텐츠 추출
-    if hasattr(response, "content"):
+    if hasattr(response, "content") and response.content:
         content = response.content
+    elif hasattr(response, "model_extra") and isinstance(response.model_extra, dict):
+        content = response.model_extra["reasoning_content"]
     elif isinstance(response, str):
         content = response
     elif isinstance(response, dict):
@@ -50,7 +53,7 @@ def parse_structured_response(response: Any, model_class: Type[T]) -> Optional[T
                 json_str = content[start : end + 1]
             else:
                 json_str = content
-        
+
         return model_class.model_validate_json(json_str)
     except Exception:
         return None

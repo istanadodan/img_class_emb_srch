@@ -39,7 +39,7 @@ async def classify_node(
     """
     이미지 분류 노드
     """
-    node_name = "classify"
+    node_name: str = "classify"
     await UIEventHandler.publish(
         event_queue, "progress", "이미지 분류 분석 중...", path=state["image_path"], node=node_name
     )
@@ -53,8 +53,8 @@ async def classify_node(
         state.update(cast(ClassificationState, result.model_dump(include=set(state))))
         state["error"] = None
 
-        status = "completed"
-        message = f"Classification successful: {state['category']} ({state['confidence']:.2f})"
+        status: str = "completed"
+        message: str = f"Classification successful: {state['category']} ({state['confidence']:.2f})"
 
     except AIClientException as e:
         state["error"] = str(e)
@@ -81,12 +81,14 @@ async def validate_result_node(
     """
     분류 결과 검증 노드
     """
-    node_name = "validate"
+    node_name: str = "validate"
     await UIEventHandler.publish(
         event_queue, "progress", "분류 결과 검증 중...", path=state["image_path"], node=node_name
     )
 
     # 1. API 에러가 발생한 경우 (신뢰도 부족 제외)
+    status: str
+    message: str
     if state.get("error"):
         state["retry_cnt"] += 1
         status = "failed"
@@ -115,19 +117,24 @@ async def embedding_node(
     state: ClassificationState, embedding_client: Any, event_queue: Optional[asyncio.Queue] = None
 ) -> ClassificationState:
     """
-    이미지 임베딩 생성 노드
+    이미지 텍스트 묘사 기반 임베딩 생성 노드
     """
-    node_name = "embedding"
+    node_name: str = "embedding"
     await UIEventHandler.publish(
-        event_queue, "progress", "이미지 벡터 추출 중...", path=state["image_path"], node=node_name
+        event_queue, "progress", "이미지 특징 벡터 추출 중...", path=state["image_path"], node=node_name
     )
     try:
-        # 모델 추론(CPU/GPU)은 별도 스레드에서 실행하여 이벤트 루프 차단 방지
-        embedding_vector = await embedding_client.embed_image(state["image_bytes"])
-        state["embedding"] = embedding_vector
+        # 1. 텍스트 기반 특징 조합 (카테고리 + 상세 설명 + 객체 태그)
+        # LLM이 생성한 풍부한 묘사를 바탕으로 시맨틱 벡터 생성
+        features_text: str = f"Category: {state.get('category')}. Description: {state.get('description')}. Tags: {', '.join(state.get('objects', []))}"
+        
+        # 2. 텍스트 임베딩 생성 (np.ndarray -> list[float] 변환)
+        embedding_vector: Any = await embedding_client.create_embeddings(features_text)
+        state["embedding"] = embedding_vector.tolist() if hasattr(embedding_vector, "tolist") else list(embedding_vector)
+        
         state["error"] = None
-        status = "completed"
-        message = f"Embedding generated successfully (Dim: {len(embedding_vector)})"
+        status: str = "completed"
+        message: str = f"Text-based embedding generated successfully (Dim: {len(state['embedding'])})"
     except Exception as e:
         state["error"] = f"Embedding generation failed: {str(e)}"
         status = "failed"
@@ -145,8 +152,8 @@ async def vector_store_node(
     state: ClassificationState, embedding_client: Any, event_queue: Optional[asyncio.Queue] = None
 ) -> ClassificationState:
     """이미지 벡터 저장 노드 (no-class 포함 모든 결과 저장)"""
-    node_name = "store"
-    category = state.get("category") or "no-class"
+    node_name: str = "store"
+    category: str = state.get("category") or "no-class"
     await UIEventHandler.publish(
         event_queue,
         "progress",
@@ -156,8 +163,8 @@ async def vector_store_node(
     )
 
     try:
-        service = VectorSearchService(embedding_client=embedding_client)
-        embedding = state.get("embedding")
+        service: VectorSearchService = VectorSearchService(embedding_client=embedding_client)
+        embedding: Optional[list[float]] = state.get("embedding")
         await service.save_embedding(
             image_path=state["image_path"],
             embedding=embedding if embedding is not None else [],
@@ -166,8 +173,8 @@ async def vector_store_node(
             description=state.get("description", "Auto-processed"),
             objects=state.get("objects", []),
         )
-        status = "completed"
-        message = f"Successfully stored in database as [{category}]"
+        status: str = "completed"
+        message: str = f"Successfully stored in database as [{category}]"
 
         # UI에 실시간 성공 결과 전송 (실시간 진행률 반영)
         await UIEventHandler.publish(
@@ -189,6 +196,31 @@ async def vector_store_node(
     WorkflowLogger.log(node_name, message, level="error" if status == "failed" else "info")
     state["logs"] = [
         WorkflowLogger.make_state_log(node_name, message, status=status, category=category)
+    ]
+    return state
+
+
+async def error_handler_node(
+    state: ClassificationState, event_queue: Optional[asyncio.Queue] = None
+) -> ClassificationState:
+    """
+    워크플로우 오류 처리 및 UI 보고 노드
+    """
+    node_name: str = "error_handler"
+    error_msg: str = state.get("error") or "Unknown error occurred during processing"
+    
+    # UI에 에러 이벤트 발행 (처리 개수 반영 및 로그 출력용)
+    await UIEventHandler.publish(
+        event_queue, 
+        "error", 
+        f"처리 실패: {error_msg}", 
+        path=state["image_path"], 
+        node=node_name
+    )
+
+    WorkflowLogger.log(node_name, f"Workflow failed for {state['image_path']}: {error_msg}", level="error")
+    state["logs"] = [
+        WorkflowLogger.make_state_log(node_name, error_msg, status="failed")
     ]
     return state
 
@@ -225,6 +257,12 @@ def create_classification_workflow(
         q = config.get("configurable", {}).get("event_queue")
         return await vector_store_node(state, embedding_client, event_queue=q)
 
+    async def error_handler_wrapper(
+        state: ClassificationState, config: RunnableConfig
+    ) -> ClassificationState:
+        q = config.get("configurable", {}).get("event_queue")
+        return await error_handler_node(state, event_queue=q)
+
     workflow = StateGraph(state_schema=ClassificationState)
 
     # 노드 추가
@@ -232,6 +270,7 @@ def create_classification_workflow(
     workflow.add_node("validate", validate_wrapper)
     workflow.add_node("embedding", embedding_wrapper)
     workflow.add_node("store", vector_store_wrapper)
+    workflow.add_node("error_handler", error_handler_wrapper)
 
     # 엣지 연결
     workflow.add_edge(START, "classify")
@@ -241,43 +280,45 @@ def create_classification_workflow(
     workflow.add_conditional_edges(
         "validate",
         route_after_classify,
-        {"retry": "classify", "continue": "embedding"},
+        {"retry": "classify", "continue": "embedding", "fail": "error_handler"},
     )
 
     # 2. 임베딩 후 라우팅
     workflow.add_conditional_edges(
         "embedding",
         route_after_embedding,
-        {"store": "store", "fail": END},
+        {"store": "store", "fail": "error_handler"},
     )
+    
+    # 최종 종료 연결
     workflow.add_edge("store", END)
+    workflow.add_edge("error_handler", END)
 
     return workflow.compile()
 
 
-def route_after_classify(state: ClassificationState) -> Literal["retry", "continue"]:
+def route_after_classify(state: ClassificationState) -> Literal["retry", "continue", "fail"]:
     """분류 검증 후 라우팅"""
-    retry_cnt = state.get("retry_cnt", 0)
-    max_retires = state.get("max_retires", 3)
+    retry_cnt: int = state.get("retry_cnt", 0)
+    max_retires: int = state.get("max_retires", 3)
 
-    # 성공했거나 최대 재시도 도달 시 임베딩으로 진행
+    # 1. 성공 케이스 (에러 없고 카테고리 정상)
     if not state.get("error") and state.get("category") not in [None, "no-class"]:
         return "continue"
 
-    if retry_cnt >= max_retires:
-        # 최대 재시도 도달 시에도 임베딩으로 진행 (no-class 상태)
-        if not state.get("category"):
-            state["category"] = "no-class"
-        return "continue"
+    # 2. 재시도 가능 여부 체크
+    if retry_cnt < max_retires:
+        return "retry"
 
-    return "retry"
+    # 3. 최대 재시도 도달 시 (에러가 남아있는 경우)
+    # 오류 처리 노드로 보내서 UI에 최종 실패 보고
+    return "fail"
 
 
 def route_after_embedding(state: ClassificationState) -> Literal["store", "fail"]:
     """임베딩 후 저장 여부 결정"""
-    # 임베딩 벡터가 없거나 에러가 있으면 저장하지 않고 종료
+    # 임베딩 벡터가 없거나 에러가 있으면 오류 처리 노드로 이동
     if state.get("error") or state.get("embedding") is None:
-        logger.error(f"Embedding failed for {state['image_path']}. Skipping storage.")
         return "fail"
 
     return "store"
