@@ -6,6 +6,7 @@ from ui.styles.theme import apply_theme
 from ui.pages.classifier_ui import render_classifier_page
 from ui.pages.gallery_ui import render_gallery_page
 from ui.pages.search_ui import render_search_page
+from ui.pages.nl_search_ui import render_nl_search_page
 
 # from backend.clients.embedding_client import preload_emb_client
 from backend.system import database
@@ -36,7 +37,7 @@ async def main():
 
         page = st.radio(
             "메뉴",
-            ["🏠 분류", "🖼️ 갤러리", "🔍 검색", "⚙️ 설정", "📊 통계"],
+            ["🏠 분류", "🖼️ 갤러리", "🔍 검색", "🤖 AI 검색", "⚙️ 설정", "📊 통계"],
             label_visibility="collapsed",
         )
 
@@ -50,6 +51,8 @@ async def main():
         await render_gallery_page()
     elif page == "🔍 검색":
         await render_search_page()
+    elif page == "🤖 AI 검색":
+        await render_nl_search_page()
     elif page == "⚙️ 설정":
         st.title("⚙️ 설정")
         st.write("설정 페이지 개발 중...")

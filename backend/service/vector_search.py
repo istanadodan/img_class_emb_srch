@@ -1,12 +1,13 @@
 """Vector Search Service - 벡터 기반 유사 이미지 검색 (pgvector 최적화)"""
 
 import logging
-from typing import Optional
+from typing import Optional, cast
 from sqlalchemy.orm import Session
-from backend.clients.embedding_client import EmbeddingClient
+from shared.constants import IMAGE_CATEGORIES
 from backend.domain.db_models import ImageRecord, EmbeddingRecord
 from backend.system.exceptions import AIClientException
 from backend.system.database import transactional
+from backend.clients.embedding_client import get_studio_embedding_client
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +15,13 @@ logger = logging.getLogger(__name__)
 class VectorSearchService:
     """벡터 검색 서비스"""
 
-    def __init__(self, embedding_client: EmbeddingClient):
+    def __init__(self, embedding_client):
         """
         Args:
             embedding_client: 임베딩 생성 클라이언트
         """
-        self.embedding_client = embedding_client
+
+        self.embedding_client = get_studio_embedding_client()
 
     @transactional
     async def save_embedding(
@@ -141,21 +143,68 @@ class VectorSearchService:
         results = query.order_by(similarity_score.desc()).limit(top_k).all()
 
         # 결과를 딕셔너리로 변환
-        similarities = []
-        for row in results:
-            similarities.append(
-                {
-                    "id": row.id,
-                    "path": row.path,
-                    "category": row.category,
-                    "confidence": row.confidence,
-                    "description": row.description,
-                    "objects": row.objects,
-                    "similarity": float(row.similarity),
-                }
-            )
+        return self._format_results(results)
 
-        return similarities
+    @transactional
+    async def _search_by_text_embedding_query(  # Renamed from search_by_text
+        self,
+        query_text: str,
+        top_k: int = 5,
+        category_filter: Optional[str] = None,
+        db: Optional[Session] = None,
+    ) -> list[dict]:
+        """
+        자연어 쿼리를 통한 이미지 검색 (내부 텍스트 임베딩 후 벡터 검색)
+
+        Args:
+            query_text: 자연어 검색어
+            top_k: 반환할 상위 K개 이미지
+            category_filter: 카테고리 필터 (선택사항)
+            db: 데이터베이스 세션
+        """
+        if not db:
+            raise AIClientException("Database session is required for search")
+
+        # 1. 텍스트 임베딩 생성
+        query_vector = await self.embedding_client.create_embeddings(query_text)
+
+        # 2. pgvector 코사인 거리 계산
+        similarity_score = 1 - EmbeddingRecord.vector.cosine_distance(query_vector.tolist())
+
+        # 3. 쿼리 작성
+        query = db.query(
+            ImageRecord.id,
+            ImageRecord.path,
+            ImageRecord.category,
+            ImageRecord.confidence,
+            ImageRecord.description,
+            ImageRecord.objects,
+            similarity_score.label("similarity"),
+        ).join(EmbeddingRecord, ImageRecord.id == EmbeddingRecord.image_id)
+
+        if category_filter:
+            query = query.filter(ImageRecord.category == category_filter)
+
+        # 유사도 임계값 (자연어 검색은 약간 낮게 설정 가능)
+        query = query.filter(similarity_score > 0.3)
+        results = query.order_by(similarity_score.desc()).limit(top_k).all()
+
+        return self._format_results(results)
+
+    def _format_results(self, results) -> list[dict]:
+        """결과 포맷팅 공통 로직"""
+        return [
+            {
+                "id": row.id,
+                "path": row.path,
+                "category": row.category,
+                "confidence": row.confidence,
+                "description": row.description,
+                "objects": row.objects,
+                "similarity": float(row.similarity),
+            }
+            for row in results
+        ]
 
     @transactional
     def get_all_images(
@@ -214,7 +263,7 @@ class VectorSearchService:
             카테고리별 유사 이미지 딕셔너리
         """
         results = {}
-        for category in ["people", "nature", "text", "events"]:
+        for category in IMAGE_CATEGORIES.keys():
             # Note: self.search_similar_images is also decorated,
             # but we pass the 'db' session explicitly here to ensure it's reused
             similar = self.search_similar_images(

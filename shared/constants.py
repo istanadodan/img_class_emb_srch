@@ -11,6 +11,17 @@ IMAGE_CATEGORIES = {
     "events": "행사",
 }
 
+# 카테고리별 이모지
+IMAGE_EMOJIS = {
+    "people": "👥",
+    "animal": "🐾",
+    "place": "🏢",
+    "flower": "🌸",
+    "nature": "🌿",
+    "text": "📄",
+    "events": "🎉",
+}
+
 # 카테고리 설명
 CATEGORY_DESCRIPTIONS = {
     "people": "사람이 중심이 되거나 포함된 이미지",

@@ -2,8 +2,11 @@
 
 import streamlit as st
 from backend.service.image_search import ImgSearchService
-from backend.clients.embedding_client import get_emb_client
+from backend.clients.embedding_client import get_studio_embedding_client as get_emb_client
 from ui.components.image_utils import render_safe_image
+
+
+from shared.constants import IMAGE_CATEGORIES, IMAGE_EMOJIS
 
 
 async def render_gallery_page():
@@ -16,26 +19,17 @@ async def render_gallery_page():
 
     st.write("분류된 이미지를 갤러리로 표시합니다.")
 
-    # 카테고리 필터
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        show_people = st.checkbox("👥 인물", value=True)
-    with col2:
-        show_nature = st.checkbox("🌿 자연", value=True)
-    with col3:
-        show_text = st.checkbox("📄 텍스트", value=True)
-    with col4:
-        show_events = st.checkbox("🎉 행사", value=True)
-
+    # 카테고리 필터 (동적 생성)
+    st.write("### 🔍 필터")
     selected_categories = []
-    if show_people:
-        selected_categories.append("people")
-    if show_nature:
-        selected_categories.append("nature")
-    if show_text:
-        selected_categories.append("text")
-    if show_events:
-        selected_categories.append("events")
+
+    # 7개 카테고리를 한 줄에 표시하기 위해 컬럼 생성
+    cols = st.columns(len(IMAGE_CATEGORIES))
+    for i, (cat_id, cat_name) in enumerate(IMAGE_CATEGORIES.items()):
+        with cols[i]:
+            emoji = IMAGE_EMOJIS.get(cat_id, "📁")
+            if st.checkbox(f"{emoji} {cat_name}", value=True, key=f"cat_{cat_id}"):
+                selected_categories.append(cat_id)
 
     # 서비스 초기화
     service = ImgSearchService(embedding_client=get_emb_client())
@@ -66,7 +60,7 @@ async def render_gallery_page():
                 render_safe_image(
                     img["path"],
                     caption=f"{img['category']}",
-                    use_container_width=True,
+                    width="stretch",
                 )
                 st.caption(f"{img['category']}:\n{img['path'].split('\\')[-1].split(".")[0]}")
 
@@ -107,6 +101,6 @@ async def render_gallery_page():
                             render_safe_image(
                                 r_img["path"],
                                 caption=f"유사도: {r_img['similarity']*100:.1f}%",
-                                use_container_width=True,
+                                width="stretch",
                             )
                 st.write("---")

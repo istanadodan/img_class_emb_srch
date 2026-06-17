@@ -11,6 +11,7 @@ from backend.system.exceptions import ImageProcessingException
 from backend.service.graph.workflow import create_classification_workflow
 from backend.system.event_handler import UIEventHandler
 
+from backend.clients.llm_clients import StudioLLMClient # Updated import
 
 class ImageClassifierService:
     """이미지 분류 서비스"""

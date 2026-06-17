@@ -26,11 +26,6 @@ class AIClient(ABC):
         """
         pass
 
-    @abstractmethod
-    def is_available(self) -> bool:
-        """클라이언트 사용 가능 여부 확인"""
-        pass
-
     @property
     @abstractmethod
     def name(self) -> str:

@@ -8,8 +8,8 @@ import janus
 from pathlib import Path
 from datetime import datetime
 from backend.service.classifier import ImageClassifierService
-from backend.clients.llm_clients import StudioLMClient
-from backend.clients.embedding_client import get_emb_client
+from backend.clients.llm_clients import StudioLLMClient
+from backend.clients.embedding_client import get_studio_embedding_client as get_emb_client
 
 
 # New function to run in a separate thread
@@ -137,7 +137,9 @@ def render_progress():
 
 async def run_classification_task(task_id, path_input, input_type, queue_async_q):
     """백그라운드 분류 작업 실행 (비차단)"""
-    service = ImageClassifierService(llm_client=StudioLMClient(), embedding_client=get_emb_client())
+    service = ImageClassifierService(
+        llm_client=StudioLLMClient(), embedding_client=get_emb_client()
+    )
 
     try:
         if input_type == "📁 폴더":
@@ -182,7 +184,7 @@ async def render_classifier_page():
                     placeholder="예: C:\\Users\\Pictures\\photo.jpg",
                 )
 
-    if st.button("🚀 신규 분류 시작", use_container_width=True, type="primary"):
+    if st.button("🚀 신규 분류 시작", width="stretch", type="primary"):
         if not path_input:
             st.error("경로를 입력해주세요.")
         else:

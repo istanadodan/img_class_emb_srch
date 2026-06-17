@@ -20,7 +20,7 @@ def get_placeholder_image() -> str:
 
 
 def render_safe_image(
-    image_path: str, caption: str | None = None, use_container_width: bool = True, **kwargs
+    image_path: str, caption: str | None = None, width: str = "stretch", **kwargs
 ):
     """
     이미지 존재 여부를 확인하고 안전하게 렌더링 (정책 5번 적용)
@@ -50,13 +50,13 @@ def render_safe_image(
     # 4. 최종 결과 렌더링
     if is_valid:
         placeholder.image(
-            image_path, caption=caption, use_container_width=use_container_width, **kwargs
+            image_path, caption=caption, width=width, **kwargs
         )
     else:
         # 부재가 확정된 경우에만 대체 이미지 노출 (정책 5번 핵심)
         placeholder.image(
             get_placeholder_image(),
             caption=f"⚠️ {caption if caption else '이미지 유실'}",
-            use_container_width=use_container_width,
+            width=width,
             **kwargs,
         )
